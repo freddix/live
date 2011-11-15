@@ -1,0 +1,35 @@
+#!/bin/sh
+#
+device=/dev/sdb
+partition=1
+target=$device$partition
+
+abort() {
+	echo "aborted: $@"
+	exit 1
+}
+
+if [ $(whoami) != root ]; then
+	echo "use sudo Luke!"
+	exit 1
+fi
+
+grep FX_LIVE /etc/mtab && umount /media/FX_LIVE
+
+echo "setting bootable flag"
+parted $device set $partition boot on || abort "can't set bootable flag"
+
+echo "writng MBR"
+dd bs=440 conv=notrunc count=1 if=/usr/share/syslinux/mbr.bin of=$target || abort "dd failed"
+echo "creating fs"
+mkfs.vfat -n FX_LIVE $target || abort "can't create filesystem"
+
+echo "installing bootloader"
+syslinux $target || abort "syslinux failed"
+[ -d /media/FX_LIVE ] || mkdir /media/FX_LIVE
+
+echo "copying files"
+mount LABEL="FX_LIVE" /media/FX_LIVE
+tar -xf livecd.tar -C /media/FX_LIVE || abort "untar failed"
+#umount /media/FX_LIVE
+

@@ -1,0 +1,10 @@
+Packages
+========
+Fryderyk Dziarmagowski <freddy@freddix.org>
+v1.0, November 2011
+
+This is a repository containing "Live CD" scripts and sources.
+
+Usage:
+sudo ./mk_live.sh
+

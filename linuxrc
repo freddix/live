@@ -1,0 +1,42 @@
+#!/bin/sh
+PATH=/bin:/sbin
+clear
+
+echo "Starting the system..."
+
+mount -t proc none /proc
+mount -t sysfs none /sys
+mount -n -o mode=0755 -t devtmpfs none /dev
+mkdir /dev/pts
+mount -t devpts devpts /dev/pts
+
+echo 0 > /proc/sys/kernel/printk
+echo /bin/mdev > /proc/sys/kernel/hotplug
+
+for module in usb-storage loop sg sr-mod cdrom sd-mod; do
+	modprobe -q $module
+done
+
+find /sys -name modalias | while read a ; do
+	modprobe `cat $a` 2>/dev/null
+done
+
+mdev -s
+
+mount -t iso9660 LABEL="FX_LIVE" /mnt/live 2>/dev/null
+mount -t vfat LABEL="FX_LIVE" /mnt/live 2>/dev/null
+mount -t ext2 LABEL="FX_LIVE" /mnt/live 2>/dev/null
+
+mount -o loop -t squashfs /mnt/live/fs.squashfs /mnt/fs
+mount -o noatime,nodiratime -t tmpfs tmpfs /mnt/union
+mount -t overlayfs -o lowerdir=/mnt/fs,upperdir=/mnt/union overlayfs /mnt/nroot
+
+umount /sys
+umount /proc
+
+mount --move /dev /mnt/nroot/dev
+mount --move /mnt/fs /mnt/nroot/mnt/livefs
+mount --move /mnt/live /mnt/nroot/initrd
+
+exec switch_root /mnt/nroot /bin/systemd
+exec cttyhack sh
