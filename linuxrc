@@ -2,7 +2,7 @@
 PATH=/bin:/sbin
 clear
 
-echo "Starting the system..."
+echo -n "Starting the system..."
 
 mount -t proc none /proc
 mount -t sysfs none /sys
@@ -23,9 +23,16 @@ done
 
 mdev -s
 
-mount -t iso9660 LABEL="FX_LIVE" /mnt/live 2>/dev/null
-mount -t vfat LABEL="FX_LIVE" /mnt/live 2>/dev/null
-mount -t ext2 LABEL="FX_LIVE" /mnt/live 2>/dev/null
+loop=10
+while test ! -f /mnt/live/fs.squashfs; do
+    mount -t iso9660 LABEL="FX_LIVE" /mnt/live 2>/dev/null
+    mount -t vfat LABEL="FX_LIVE" /mnt/live 2>/dev/null
+    mount -t ext2 LABEL="FX_LIVE" /mnt/live 2>/dev/null
+    test "$loop" -gt 0 || break
+    loop=$(($loop - 1))
+    sleep 1
+    echo -n "."
+done
 
 mount -o loop -t squashfs /mnt/live/fs.squashfs /mnt/fs
 mount -o noatime,nodiratime -t tmpfs tmpfs /mnt/union
@@ -40,3 +47,4 @@ mount --move /mnt/live /mnt/nroot/initrd
 
 exec switch_root /mnt/nroot /bin/systemd
 exec cttyhack sh
+
