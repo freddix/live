@@ -9,7 +9,7 @@ INITRD_DIR="${TMP_DIR}/initrd"
 LIVECD_DIR=$(pwd)
 
 KERNEL_FNAME="std"
-KERNEL_VERSION="3.3.4"
+KERNEL_VERSION="3.4.0"
 KERNEL_RELEASE="1"
 KERNEL_UNAME="${KERNEL_VERSION}-${KERNEL_FNAME}-${KERNEL_RELEASE}"
 KERNEL_ARCH="i686"
@@ -24,24 +24,11 @@ abort() {
 	exit 1
 }
 
-find_mod_deps() {
-	local module="$1"
-
-	modprobe \
-	    --set-version ${KERNEL_UNAME}	\
-	    --show-depends $module		\
-	    --dirname ${FS_DIR} |		\
-		while read insmod modpath options; do
-			echo $modpath
-		done
-}
-
 prepare() {
     	rm -rf ${INITRD_DIR} ${IMAGE_DIR} ${FS_DIR}
     	rm -f ${LIVECD_DIR}/livecd.iso
 	mkdir -p ${INITRD_DIR}/data ${INITRD_DIR}/live ${IMAGE_DIR}
 	mkdir -p ${INITRD_DIR}/mnt/{live,fs,nroot,union}
-	mkdir -p ${MODDIR}
 	cp -rf /lib/initrd-utils/* ${INITRD_DIR}
 }
 
@@ -73,26 +60,6 @@ create_boot() {
 
 create_image() {
     	echo "generating initrd"
-
-	ata_modules=$(find ${FS_DIR}/lib/modules/${KERNEL_UNAME}/kernel/drivers/ata \
-		-type f -name "*.ko.gz" -exec basename {} \; | sed "s|.ko.gz||")
-	scsi_modules=$(find ${FS_DIR}/lib/modules/${KERNEL_UNAME}/kernel/drivers/scsi \
-		-type f -name "*.ko.gz" -exec basename {} \; | sed "s|.ko.gz||")
-	gpu_modules="i915 nouveau radeon intel-agp amd64-agp sis-agp via-agp"
-	fs_modules="ext2 vfat isofs overlayfs squashfs"
-	misc_modules="cdrom loop nls_iso8859-1 nls_cp437 crc-t10dif binfmt_misc"
-	usb_modules="ehci-hcd ohci-hcd uhci-hcd xhci-hcd usb-storage uas"
-
-	for module in $ata_modules $fs_modules $gpu_modules \
-		$misc_modules $scsi_modules $usb_modules; do
-		cp -aR $(find_mod_deps $module) ${MODDIR} || \
-			abort "copying of modules to ${MODDIR}"
-	done
-
-	gunzip -f $(find ${MODDIR} -type f -name '*.gz') || abort "can't unzip modules"
-
-	/sbin/depmod -aeb ${INITRD_DIR} -F ${IMAGE_DIR}/System.map \
-		${KERNEL_UNAME} || abort "depomd failed"
 
 	cd ${INITRD_DIR}
 	find . | cpio	\
@@ -153,15 +120,15 @@ create_system() {
 
 	ln -sf /proc/self/mounts ${FS_DIR}/etc/mtab
 
-	#mkdir -p ${FS_DIR}/etc/systemd/system/getty.target.wants
-	#ln -sf /lib/systemd/system/getty@.service \
-	#    ${FS_DIR}/etc/systemd/system/getty.target.wants/getty@tty1.service
+	mkdir -p ${FS_DIR}/etc/systemd/system/getty.target.wants
+	ln -sf /lib/systemd/system/getty@.service \
+	    ${FS_DIR}/etc/systemd/system/getty.target.wants/getty@tty1.service
 
-	ln -sf /lib/systemd/system/graphical.target \
-	    ${FS_DIR}/etc/systemd/system/default.target
+	#ln -sf /lib/systemd/system/graphical.target \
+	#    ${FS_DIR}/etc/systemd/system/default.target
 
-	ln -sf /lib/systemd/system/gdm.service \
-	    ${FS_DIR}/etc/systemd/system/graphical.target.wants
+	#ln -sf /lib/systemd/system/gdm.service \
+	#    ${FS_DIR}/etc/systemd/system/graphical.target.wants
 
 	echo 'SUPPORTED_LOCALES="en_US.UTF-8 de_DE.UTF-8 pl_PL.UTF-8"' > ${FS_DIR}/etc/sysconfig/i18n
 	echo > ${LIVECD_DIR}/config/fstab ${FS_DIR}/etc
@@ -179,7 +146,7 @@ create_system() {
 	cp ${LIVECD_DIR}/config/*.list ${FS_DIR}/root/install
 	cp -R ${LIVECD_DIR}/config/poldek/repos.d ${FS_DIR}/root/install
 
-	echo "DEFAULTWM=gnome" > ${FS_DIR}/etc/sysconfig/desktop
+	#echo "DEFAULTWM=gnome" > ${FS_DIR}/etc/sysconfig/desktop
 	#echo "default_user	live" >> ${FS_DIR}/etc/slim/slim.conf
 	#echo "auto_login	yes" >> ${FS_DIR}/etc/slim/slim.conf
 

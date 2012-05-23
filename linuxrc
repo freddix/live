@@ -11,17 +11,6 @@ mkdir /dev/pts
 mount -t devpts devpts /dev/pts
 
 echo 0 > /proc/sys/kernel/printk
-echo /bin/mdev > /proc/sys/kernel/hotplug
-
-for module in usb-storage loop sg sr-mod cdrom sd-mod; do
-	modprobe -q $module
-done
-
-find /sys -name modalias | while read a ; do
-	modprobe `cat $a` 2>/dev/null
-done
-
-mdev -s
 
 loop=10
 while test ! -f /mnt/live/fs.squashfs; do
