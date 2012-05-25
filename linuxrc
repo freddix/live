@@ -2,6 +2,8 @@
 PATH=/bin:/sbin
 clear
 
+set -x
+
 echo -n "Starting the system..."
 
 mount -t proc none /proc
@@ -12,12 +14,18 @@ mount -t devpts devpts /dev/pts
 
 echo 0 > /proc/sys/kernel/printk
 
+modprobe -q loop
+modprobe -q squashfs
+modprobe -q overlayfs
+modprobe -q isofs
+modprobe -q vfat
+
 loop=10
 while test ! -f /mnt/live/fs.squashfs; do
     mount -t iso9660 LABEL="FX_LIVE" /mnt/live 2>/dev/null
     mount -t vfat LABEL="FX_LIVE" /mnt/live 2>/dev/null
     mount -t ext2 LABEL="FX_LIVE" /mnt/live 2>/dev/null
-    test "$loop" -gt 0 || break
+    test "$loop" -gt 0 || exec cttyhack sh
     loop=$(($loop - 1))
     sleep 1
     echo -n "."
@@ -35,5 +43,4 @@ mount --move /mnt/fs /mnt/nroot/mnt/livefs
 mount --move /mnt/live /mnt/nroot/initrd
 
 exec switch_root /mnt/nroot /bin/systemd
-exec cttyhack sh
 

@@ -10,7 +10,7 @@ LIVECD_DIR=$(pwd)
 
 KERNEL_FNAME="std"
 KERNEL_VERSION="3.4.0"
-KERNEL_RELEASE="1"
+KERNEL_RELEASE="2"
 KERNEL_UNAME="${KERNEL_VERSION}-${KERNEL_FNAME}-${KERNEL_RELEASE}"
 KERNEL_ARCH="i686"
 
@@ -29,7 +29,20 @@ prepare() {
     	rm -f ${LIVECD_DIR}/livecd.iso
 	mkdir -p ${INITRD_DIR}/data ${INITRD_DIR}/live ${IMAGE_DIR}
 	mkdir -p ${INITRD_DIR}/mnt/{live,fs,nroot,union}
+	mkdir -p ${MODDIR}
 	cp -rf /lib/initrd-utils/* ${INITRD_DIR}
+}
+
+find_mod_deps() {
+    local module="$1"
+
+    modprobe \
+	--set-version ${KERNEL_UNAME}       \
+	--show-depends $module              \
+	--dirname ${FS_DIR} |               \
+	while read insmod modpath options; do
+	    echo $modpath
+	done
 }
 
 create_boot() {
@@ -60,6 +73,19 @@ create_boot() {
 
 create_image() {
     	echo "generating initrd"
+
+	fs_modules="vfat isofs overlayfs squashfs"
+	misc_modules="loop nls_iso8859-1 nls_cp437 binfmt_misc"
+
+	for module in $misc_modules $fs_modules; do
+        cp -aR $(find_mod_deps $module) ${MODDIR} || \
+                abort "copying of modules to ${MODDIR}"
+	done
+
+	gunzip -f $(find ${MODDIR} -type f -name '*.gz') || abort "can't unzip modules"
+
+	/sbin/depmod -aeb ${INITRD_DIR} -F ${IMAGE_DIR}/System.map \
+	    ${KERNEL_UNAME} || abort "depomd failed"
 
 	cd ${INITRD_DIR}
 	find . | cpio	\
@@ -102,7 +128,6 @@ create_system() {
 	LC_ALL=C poldek --root="${FS_DIR}" --conf "${POLDEK_DIR}/poldek.conf" \
 		-i ${RPM_LIST} \
 		kernel-${KERNEL_FNAME}-${KERNEL_VERSION}-${KERNEL_RELEASE}.${KERNEL_ARCH}		\
-		kernel-${KERNEL_FNAME}-drm-${KERNEL_VERSION}-${KERNEL_RELEASE}.${KERNEL_ARCH}		\
 		kernel-${KERNEL_FNAME}-sound-alsa-${KERNEL_VERSION}-${KERNEL_RELEASE}.${KERNEL_ARCH}
 	[ $? -ne 0 ] && abort "packages installation failed"
 
@@ -174,9 +199,9 @@ done
 
 #set -x
 
-prepare
-create_system
-create_squashfs_img
+#prepare
+#create_system
+#create_squashfs_img
 create_boot
 create_image
 create_iso
