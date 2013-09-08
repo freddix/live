@@ -1,46 +1,62 @@
-#!/bin/sh
-PATH=/bin:/sbin
-clear
+#!/usr/bin/sh
+PATH=/usr/bin:/usr/sbin
 
-set -x
+RD_TIMESTAMP=$(systemd-timestamp)
 
-echo -n "Starting the system..."
+mount -n -t proc proc /proc -o nosuid,noexec,nodev,relatime
+mount -n -t sysfs sys /sys -o nosuid,noexec,nodev,relatime
+mount -n -t devtmpfs none /dev -o relatime,mode=0755,nosuid
+mount -n -t tmpfs run /run -o nosuid,nodev,mode=0755
 
-mount -t proc none /proc
-mount -t sysfs none /sys
-mount -n -o mode=0755 -t devtmpfs none /dev
-mkdir /dev/pts
-mount -t devpts devpts /dev/pts
+cmdl=$(cat /proc/cmdline)
+
+if test "${cmdl#*quiet}" = "$cmdl"
+then
+    set -x
+fi
+
+live_dir=/run/freddix_live/live
+sfs_dir=/run/freddix_live/sfs
+cow_dir=/run/freddix_live/cow
+
+mkdir -m755 /run/initramfs
+mkdir -m755 -p $live_dir $cow_dir $sfs_dir
+mkdir -m755 /new_root
 
 echo 0 > /proc/sys/kernel/printk
 
 modprobe -q loop
 modprobe -q squashfs
-modprobe -q overlayfs
 modprobe -q isofs
 modprobe -q vfat
+modprobe -q usb-storage
+modprobe -q dm-snapshot
 
-loop=10
-while test ! -f /mnt/live/fs.squashfs; do
-    mount -t iso9660 LABEL="FX_LIVE" /mnt/live 2>/dev/null
-    mount -t vfat LABEL="FX_LIVE" /mnt/live 2>/dev/null
-    mount -t ext2 LABEL="FX_LIVE" /mnt/live 2>/dev/null
-    test "$loop" -gt 0 || exec cttyhack sh
-    loop=$(($loop - 1))
-    sleep 1
-    echo -n "."
+find /sys -name modalias | while read a ; do
+	modprobe -q $(cat $a)
 done
 
-mount -o loop -t squashfs /mnt/live/fs.squashfs /mnt/fs
-mount -o noatime,nodiratime -t tmpfs tmpfs /mnt/union
-mount -t overlayfs -o lowerdir=/mnt/fs,upperdir=/mnt/union overlayfs /mnt/nroot
+loop=10
+while test ! -f "$live_dir/freddix.sfs"; do
+    mount -t iso9660 LABEL="FX_LIVE" $live_dir 2>/dev/null
+    mount -t vfat LABEL="FX_LIVE" $live_dir 2>/dev/null
+    mount -t ext2 LABEL="FX_LIVE" $live_dir 2>/dev/null
+    test "$loop" -gt 0 || exec sh
+    loop=$((loop - 1))
+    sleep 1
+done
 
-umount /sys
-umount /proc
+sfs=$(losetup --find --show --read-only $live_dir/freddix.sfs)
+mount -r $sfs $sfs_dir
 
-mount --move /dev /mnt/nroot/dev
-mount --move /mnt/fs /mnt/nroot/mnt/livefs
-mount --move /mnt/live /mnt/nroot/initrd
+fs=$(losetup --find --show --read-only $sfs_dir/freddix.fs)
+fs_size=$(blockdev --getsz $sfs_dir/freddix.fs)
 
-exec switch_root /mnt/nroot /bin/systemd
+dd of="$cow_dir/freddix.cow" count=0 seek=$fs_size
+cow_image=$(losetup --find --show $cow_dir/freddix.cow)
+
+echo "0 $fs_size snapshot $fs $cow_image N 8" | dmsetup create freddix
+mount -w /dev/mapper/freddix /new_root
+
+exec env -i "TERM=$TERM" "RD_TIMESTAMP=$RD_TIMESTAMP" /usr/sbin/switch_root /new_root /usr/lib/systemd/systemd-bootchart
 

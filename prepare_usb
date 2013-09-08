@@ -1,6 +1,6 @@
 #!/bin/sh
-#
-device=/dev/sdb
+
+device=/dev/sdc
 partition=1
 target=$device$partition
 
@@ -14,8 +14,6 @@ if [ $(whoami) != root ]; then
 	exit 1
 fi
 
-grep FX_LIVE /etc/mtab && umount /media/FX_LIVE
-
 echo "setting bootable flag"
 parted $device set $partition boot on || abort "can't set bootable flag"
 
@@ -26,10 +24,4 @@ mkfs.vfat -n FX_LIVE $target || abort "can't create filesystem"
 
 echo "installing bootloader"
 syslinux $target || abort "syslinux failed"
-[ -d /media/FX_LIVE ] || mkdir /media/FX_LIVE
-
-echo "copying files"
-mount LABEL="FX_LIVE" /media/FX_LIVE
-tar -xf livecd.tar -C /media/FX_LIVE || abort "untar failed"
-#umount /media/FX_LIVE
 
