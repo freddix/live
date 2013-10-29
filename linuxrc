@@ -1,19 +1,17 @@
 #!/usr/bin/sh
 PATH=/usr/bin:/usr/sbin
 
-RD_TIMESTAMP=$(systemd-timestamp)
-
-mount -n -t proc proc /proc -o nosuid,noexec,nodev,relatime
-mount -n -t sysfs sys /sys -o nosuid,noexec,nodev,relatime
-mount -n -t devtmpfs none /dev -o relatime,mode=0755,nosuid
-mount -n -t tmpfs run /run -o nosuid,nodev,mode=0755
-
+mount -t proc proc /proc -o nosuid,noexec,nodev,relatime
 cmdl=$(cat /proc/cmdline)
 
 if test "${cmdl#*quiet}" = "$cmdl"
 then
     set -x
 fi
+
+mount -t sysfs sys /sys -o nosuid,noexec,nodev,relatime
+mount -t devtmpfs none /dev -o relatime,mode=0755,nosuid
+mount -t tmpfs run /run -o nosuid,nodev,mode=0755
 
 live_dir=/run/freddix_live/live
 sfs_dir=/run/freddix_live/sfs
@@ -32,18 +30,19 @@ modprobe -q vfat
 modprobe -q usb-storage
 modprobe -q dm-snapshot
 
-find /sys -name modalias | while read a ; do
+find /sys/devices/pci* -name modalias | while read a ; do
 	modprobe -q $(cat $a)
 done
 
 loop=10
+wait=1
 while test ! -f "$live_dir/freddix.sfs"; do
     mount -t iso9660 LABEL="FX_LIVE" $live_dir 2>/dev/null
     mount -t vfat LABEL="FX_LIVE" $live_dir 2>/dev/null
     mount -t ext2 LABEL="FX_LIVE" $live_dir 2>/dev/null
     test "$loop" -gt 0 || exec sh
-    loop=$((loop - 1))
-    sleep 1
+    loop=$((loop - wait))
+    sleep $wait
 done
 
 sfs=$(losetup --find --show --read-only $live_dir/freddix.sfs)
@@ -52,11 +51,13 @@ mount -r $sfs $sfs_dir
 fs=$(losetup --find --show --read-only $sfs_dir/freddix.fs)
 fs_size=$(blockdev --getsz $sfs_dir/freddix.fs)
 
-dd of="$cow_dir/freddix.cow" count=0 seek=$fs_size
+dd of="$cow_dir/freddix.cow" count=0 seek=$fs_size 2>/dev/null
 cow_image=$(losetup --find --show $cow_dir/freddix.cow)
 
 echo "0 $fs_size snapshot $fs $cow_image N 8" | dmsetup create freddix
 mount -w /dev/mapper/freddix /new_root
 
-exec env -i "TERM=$TERM" "RD_TIMESTAMP=$RD_TIMESTAMP" /usr/sbin/switch_root /new_root /usr/lib/systemd/systemd-bootchart
+[ -c /dev/fb0 ] && fbsplash -s /usr/share/pixmaps/logo.ppm
+
+exec env -i "TERM=$TERM" /usr/sbin/switch_root /new_root /usr/lib/systemd/systemd-bootchart
 

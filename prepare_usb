@@ -1,6 +1,6 @@
 #!/bin/sh
 
-device=/dev/sdc
+device=/dev/sdd
 partition=1
 target=$device$partition
 

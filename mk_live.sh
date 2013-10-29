@@ -11,8 +11,8 @@ INITRD_DIR="${TMP_DIR}/initrd"
 LIVECD_DIR=$(pwd)
 
 KERNEL_FNAME="std_stats"
-KERNEL_VERSION="3.10.10"
-KERNEL_RELEASE="2"
+KERNEL_VERSION="3.11.6"
+KERNEL_RELEASE="1"
 KERNEL_UNAME="${KERNEL_VERSION}-${KERNEL_FNAME}-${KERNEL_RELEASE}"
 KERNEL_ARCH="x86_64"
 #KERNEL_ARCH="i686"
@@ -21,117 +21,26 @@ MODDIR="${INITRD_DIR}/usr/lib/modules/${KERNEL_UNAME}/kernel"
 
 POLDEK_DIR="${LIVECD_DIR}/config/poldek"
 RPM_LIST=$(cat ${LIVECD_DIR}/config/rpm-base.list)
-#RPM_X_LIST=$(cat ${LIVECD_DIR}/config/rpm-x-gnome.list)
+RPM_X_LIST=$(cat ${LIVECD_DIR}/config/rpm-x.list)
+#RPM_DE_LIST=$(cat ${LIVECD_DIR}/config/rpm-xfce.list)
+#RPM_DE_LIST=$(cat ${LIVECD_DIR}/config/rpm-gnome.list)
+RPM_DE_LIST=$(cat ${LIVECD_DIR}/config/rpm-mate.list)
 
 ED=
 
 abort() {
-    echo "aborted: $@"
+    echo "--> aborted: $@ <--"
     exit 1
 }
 
 clean_build () {
-    rm -rf ${INITRD_DIR} ${IMAGE_DIR} ${FS_DIR} ${FS_IMAGE_DIR} ${MNT_DIR}
+    rm -rf ${IMAGE_DIR} ${FS_DIR} ${FS_IMAGE_DIR} ${MNT_DIR}
 }
 
 prepare() {
     clean_build
-    rm -f ${LIVECD_DIR}/livecd.iso
-    mkdir -p ${IMAGE_DIR}
     mkdir -p ${FS_IMAGE_DIR}
     mkdir -p ${MNT_DIR}
-    mkdir -p ${MODDIR}
-}
-
-find_mod_deps() {
-    local module="$1"
-
-    /usr/sbin/modprobe -q \
-	--ignore-install		\
-	--set-version ${KERNEL_UNAME}	\
-	--show-depends $module		\
-	--dirname ${FS_DIR} |		\
-	while read insmod modpath options; do
-	    echo $modpath
-	done
-}
-
-create_boot() {
-    echo "preparing boot infrastucture"
-
-    cp ${LIVECD_DIR}/config/menu.cfg ${IMAGE_DIR}/extlinux.conf
-    cp ${LIVECD_DIR}/config/menu.cfg ${IMAGE_DIR}/isolinux.cfg
-    cp ${LIVECD_DIR}/config/menu.cfg ${IMAGE_DIR}/syslinux.cfg
-    cp ${LIVECD_DIR}/config/help.txt ${IMAGE_DIR}
-    cp ${LIVECD_DIR}/config/version.txt ${IMAGE_DIR}
-    cp ${FS_DIR}/usr/share/syslinux/isolinux.bin ${IMAGE_DIR}
-    cp ${FS_DIR}/usr/share/syslinux/linux.c32 ${IMAGE_DIR}
-
-    cp linuxrc ${INITRD_DIR}/linuxrc
-    ln -sf linuxrc ${INITRD_DIR}/init
-
-    chmod +x ${INITRD_DIR}/linuxrc ${INITRD_DIR}/init
-
-    cp -a ${FS_DIR}/boot/System.map-${KERNEL_UNAME} ${IMAGE_DIR}/System.map
-    cp -a ${FS_DIR}/boot/vmlinuz-${KERNEL_UNAME} ${IMAGE_DIR}/vmlinuz
-}
-
-create_image() {
-    fs_modules="vfat isofs overlayfs squashfs"
-    misc_modules="dm-snapshot loop nls_cp437 binfmt_misc crc32c crc32c-intel"
-    usb_modules="ehci-hcd ehci-pci ohci-hcd uhci-hcd xhci-hcd usb-storage"
-
-    for module in $misc_modules $fs_modules $usb_modules; do
-	echo $(find_mod_deps $module)
-	cp -aR $(find_mod_deps $module) ${MODDIR} || \
-	    abort "copying of modules to ${MODDIR}"
-    done
-
-    /usr/sbin/depmod -aeb ${INITRD_DIR} -F ${IMAGE_DIR}/System.map \
-	${KERNEL_UNAME} || abort "depomd failed"
-
-    echo "creating basic initrd infrastructure"
-    rpm --root ${INITRD_DIR} --initdb
-
-    LC_ALL=C poldek --root="${INITRD_DIR}" --conf "${POLDEK_DIR}/poldek_$KERNEL_ARCH.conf" \
-	-i util-linux kmod device-mapper mksh findutils filesystem coreutils
-
-    find ${INITRD_DIR} -mindepth 3 -empty -type d -exec rmdir {} \;
-    rm -rf ${INITRD_DIR}/usr/share/{doc,info,locale,man}
-
-    cp ${FS_DIR}/usr/lib/systemd/systemd-timestamp ${INITRD_DIR}/usr/bin
-
-    echo "generating initrd"
-    cd ${INITRD_DIR}
-    find . | cpio -o -H newc | xz --check=crc32 > ${IMAGE_DIR}/initrd.xz
-    [ $? -eq 0 ] || abort "initrd image creation failed"
-
-    cd ${LIVECD_DIR}
-}
-
-create_iso() {
-    echo "generating iso image"
-    if [ "$RPM_X_LIST" != "" ]; then
-	ED="_X"
-    fi
-    genisoimage \
-	-o ${LIVECD_DIR}/livecd_${KERNEL_VERSION}-${KERNEL_RELEASE}.${KERNEL_ARCH}${ED}.iso \
-	-b isolinux.bin		\
-	-no-emul-boot		\
-	-boot-load-size 4	\
-	-boot-info-table	\
-	-V "FX_LIVE"		\
-	-input-charset utf-8	\
-	-quiet			\
-	-cache-inodes -r -J -l ${IMAGE_DIR}
-    [ $? -eq 0 ] || abort "iso image creation failed"
-    chmod 0644 ${LIVECD_DIR}/livecd*.iso
-}
-
-create_tar() {
-    cd ${IMAGE_DIR}
-    tar -cf ${LIVECD_DIR}/livecd_${KERNEL_VERSION}-${KERNEL_RELEASE}.${KERNEL_ARCH}${ED}.tar .
-    cd ${LIVECD_DIR}
 }
 
 create_system() {
@@ -142,28 +51,37 @@ create_system() {
 
     LC_ALL=C poldek --upa --conf "${POLDEK_DIR}/poldek_$KERNEL_ARCH.conf"
     LC_ALL=C poldek --root="${FS_DIR}" --conf "${POLDEK_DIR}/poldek_$KERNEL_ARCH.conf" \
-	-i ${RPM_LIST} ${RPM_X_LIST} \
+	-i ${RPM_LIST} ${RPM_X_LIST} ${RPM_DE_LIST} \
 	kernel-${KERNEL_FNAME}-${KERNEL_VERSION}-${KERNEL_RELEASE}.${KERNEL_ARCH}
 
     # test for userspace completness after packages installation
     [ -f ${FS_DIR}/usr/sbin/useradd ] || abort "packages installation not completed!"
 
     # add live user
-    chroot ${FS_DIR} /usr/sbin/useradd \
-	-m -G adm,wheel,audio,video,cdrom,usb,fuse,logs,systemd-journal \
-	-s "/usr/bin/zsh" -c "Freddix" live
+    chroot ${FS_DIR} /usr/sbin/useradd -m -G adm,wheel,audio,video,cdrom,usb,fuse,logs,systemd-journal -s /usr/bin/zsh -c Freddix live
 
     # standard passwords
-    echo live | chroot ${FS_DIR} passwd --stdin live
-    echo live | chroot ${FS_DIR} passwd --stdin root
+    echo live:live | chroot ${FS_DIR} chpasswd
+    echo root:live | chroot ${FS_DIR} chpasswd
+
+    # zsh for all!
+    chroot ${FS_DIR} chsh -s /usr/bin/zsh
 
     echo 'PRETTY_HOSTNAME="Freddix Live"' > ${FS_DIR}/etc/machine-info
     echo 'ICON_NAME=' >> ${FS_DIR}/etc/machine-info
+
+    cp ${LIVECD_DIR}/logo.ppm ${FS_DIR}/usr/share/pixmaps
 
     # timezone
     ln -sf /usr/share/zoneinfo/Europe/Berlin \
 	${FS_DIR}/etc/localtime
     [ $? -ne 0 ] && abort "can't link!"
+
+    cp ${LIVECD_DIR}/config/90-pkexec.rules \
+    	${FS_DIR}/etc/polkit-1/rules.d
+
+    cp ${LIVECD_DIR}/config/10-local.rules \
+    	${FS_DIR}/etc/udev/rules.d
 
     # disable Predictable Network Interface Names
     ln -sf /dev/null \
@@ -200,10 +118,16 @@ create_system() {
 	#    ${FS_DIR}/usr/lib/systemd/user/default.target
 	#[ $? -ne 0 ] && abort "can't link!"
 
-	echo "[daemon]\nAutomaticLogin=live\nAutomaticLoginEnable=True\n" > ${FS_DIR}/etc/gdm/custom.conf
 	#echo "CLUTTER_VBLANK=none" >> ${FS_DIR}/etc/environment
 
-	mkdir ${FS_DIR}/etc/X11/xorg.conf.d
+	[ -f ${FS_DIR}/etc/gdm/custom.conf ] && echo "[daemon]\nAutomaticLogin=live\nAutomaticLoginEnable=True\n" > ${FS_DIR}/etc/gdm/custom.conf
+
+	if [ -f ${FS_DIR}/etc/lightdm/lightdm.conf ]; then
+	    cp ${LIVECD_DIR}/config/lightdm-gtk-greeter.conf ${FS_DIR}/etc/lightdm
+	    sed -i -e 's|#autologin-user=.*|autologin-user=live|' \
+	    	-i -e 's|#user-session=.*|user-session=mate|' ${FS_DIR}/etc/lightdm/lightdm.conf
+	fi
+
 	cp ${LIVECD_DIR}/config/00-keyboard.conf \
 	    ${FS_DIR}/etc/X11/xorg.conf.d
     fi
@@ -214,17 +138,10 @@ create_system() {
     echo "Output=/var/log" >> ${FS_DIR}/etc/systemd/bootchart.conf
     echo "Init=/usr/bin/systemd" >> ${FS_DIR}/etc/systemd/bootchart.conf
 
-    cp ${LIVECD_DIR}/config/90-pkexec.rules \
-    	${FS_DIR}/etc/polkit-1/rules.d
-
     mkdir -p ${FS_DIR}/root/install ${FS_DIR}/root/tmp
-    cp ${LIVECD_DIR}/config/poldek/poldek.conf ${FS_DIR}/root/install
     echo ${RPM_LIST} > ${FS_DIR}/root/install/packages.list
-    cp -R ${LIVECD_DIR}/config/poldek/repos.d ${FS_DIR}/root/install
-
-    #echo "DEFAULTWM=gnome" > ${FS_DIR}/etc/sysconfig/desktop
-    #echo "default_user	live" >> ${FS_DIR}/etc/slim/slim.conf
-    #echo "auto_login	yes" >> ${FS_DIR}/etc/slim/slim.conf
+    rm -f  ${FS_DIR}/etc/poldek/repos.d/*
+    cp -a ${LIVECD_DIR}/config/poldek/repos.d/* ${FS_DIR}/etc/poldek/repos.d
 
     chroot ${FS_DIR} localedb-gen
     chroot ${FS_DIR} prelink -qa -m
@@ -232,13 +149,123 @@ create_system() {
     rm -f ${FS_DIR}/var/lib/rpm/__*
 
     chown 1000:users -R ${FS_DIR}/home/users/live
+
     [ $? -ne 0 ] && abort "packages installation failed"
 }
 
-create_squashfs_img() {
-    echo "generating squashfs image"
-    /usr/sbin/mksquashfs ${FS_DIR} ${IMAGE_DIR}/fs.squashfs #-comp xz -Xbcj x86 -b 1048576 -Xdict-size 1048576 -no-recovery -noappend
+find_mod_deps() {
+    local module="$1"
+
+    /usr/sbin/modprobe -q \
+	--ignore-install		\
+	--set-version ${KERNEL_UNAME}	\
+	--show-depends $module		\
+	--dirname ${FS_DIR} |		\
+	while read insmod modpath options; do
+	    echo $modpath
+	done
 }
+
+create_boot() {
+    echo "preparing boot infrastucture"
+
+    rm -rf ${INITRD_DIR}
+    mkdir -p ${IMAGE_DIR} ${MODDIR}
+    cp ${LIVECD_DIR}/config/menu.cfg ${IMAGE_DIR}/extlinux.conf
+    cp ${LIVECD_DIR}/config/menu.cfg ${IMAGE_DIR}/isolinux.cfg
+    cp ${LIVECD_DIR}/config/menu.cfg ${IMAGE_DIR}/syslinux.cfg
+    cp ${LIVECD_DIR}/config/help.txt ${IMAGE_DIR}
+    cp ${LIVECD_DIR}/config/version.txt ${IMAGE_DIR}
+    cp ${FS_DIR}/usr/share/syslinux/isolinux.bin ${IMAGE_DIR}
+    cp ${FS_DIR}/usr/share/syslinux/ldlinux.c32 ${IMAGE_DIR}
+
+    cp linuxrc ${INITRD_DIR}/linuxrc
+    ln -sf linuxrc ${INITRD_DIR}/init
+
+    chmod +x ${INITRD_DIR}/linuxrc ${INITRD_DIR}/init
+
+    cp -a ${FS_DIR}/boot/System.map-${KERNEL_UNAME} ${IMAGE_DIR}/System.map
+    cp -a ${FS_DIR}/boot/vmlinuz-${KERNEL_UNAME} ${IMAGE_DIR}/vmlinuz
+
+    fs_modules="vfat isofs squashfs"
+    misc_modules="dm-snapshot loop nls_cp437 binfmt_misc crc32c crc32c-intel"
+    usb_modules="ehci-hcd ehci-pci ohci-hcd uhci-hcd xhci-hcd usb-storage"
+
+    for module in $misc_modules $fs_modules $usb_modules; do
+        echo $(find_mod_deps $module)
+        cp -aR $(find_mod_deps $module) ${MODDIR} || \
+            abort "copying of modules to ${MODDIR}"
+    done
+
+    #cp -ar ${FS_DIR}/usr/lib/modules/${KERNEL_UNAME} ${INITRD_DIR}/usr/lib/modules
+
+    /usr/sbin/depmod -aeb ${INITRD_DIR} -F ${IMAGE_DIR}/System.map \
+        ${KERNEL_UNAME} || abort "depomd failed"
+
+    rpm --root ${INITRD_DIR} --initdb
+
+    LC_ALL=C poldek --root="${INITRD_DIR}" --conf "${POLDEK_DIR}/poldek_$KERNEL_ARCH.conf" \
+	-i device-mapper busybox-live kmod
+
+    mkdir ${INITRD_DIR}/{dev,sys,proc,run,tmp}
+    if [ "$KERNEL_ARCH" == "x86_64" ]; then
+        ln -sf /usr/lib64 ${INITRD_DIR}/lib64
+    else
+        ln -sf /usr/lib ${INITRD_DIR}/lib
+    fi
+    ln -sf /usr/bin ${INITRD_DIR}/bin
+    ln -sf /usr/sbin ${INITRD_DIR}/sbin
+
+    mv ${INITRD_DIR}/usr/bin/{busybox.live,busybox}
+    for applet in $(${INITRD_DIR}/usr/bin/busybox --list); do
+        ln -sf busybox ${INITRD_DIR}/usr/bin/$applet
+    done
+    [ $? -eq 0 ] || abort "can't creat busybox applet links"
+
+    #cp ${FS_DIR}/usr/bin/mkdir ${INITRD_DIR}/usr/bin
+    cp ${FS_DIR}/usr/sbin/{blockdev,losetup,switch_root} ${INITRD_DIR}/usr/sbin
+
+    #find ${INITRD_DIR} -mindepth 3 -empty -type d -exec rmdir {} \;
+    #rm -rf ${INITRD_DIR}/usr/share/{doc,info,locale,man}
+
+    cp ${LIVECD_DIR}/logo.ppm ${INITRD_DIR}/usr/share/pixmaps
+
+    #chroot ${INITRD_DIR} prelink -qa -m
+    rm -f ${INITRD_DIR}/var/lib/rpm/__*
+
+    echo "generating initrd"
+    cd ${INITRD_DIR}
+    find . | cpio -o -H newc | xz -1 --check=crc32 > ${IMAGE_DIR}/initrd.xz
+    [ $? -eq 0 ] || abort "initrd image creation failed"
+
+    cd ${LIVECD_DIR}
+}
+
+create_iso() {
+    echo "generating iso image"
+    if [ "$RPM_X_LIST" != "" ]; then
+	ED="_X"
+    fi
+    genisoimage \
+	-o ${LIVECD_DIR}/livecd_${KERNEL_VERSION}-${KERNEL_RELEASE}.${KERNEL_ARCH}${ED}.iso \
+	-b isolinux.bin		\
+	-no-emul-boot		\
+	-boot-load-size 4	\
+	-boot-info-table	\
+	-V "FX_LIVE"		\
+	-input-charset utf-8	\
+	-quiet			\
+	-cache-inodes -r -J -l ${IMAGE_DIR}
+    [ $? -eq 0 ] || abort "iso image creation failed"
+    chmod 0644 ${LIVECD_DIR}/livecd*.iso
+}
+
+create_tar() {
+    cd ${IMAGE_DIR}
+    tar -cf ${LIVECD_DIR}/livecd_${KERNEL_VERSION}-${KERNEL_RELEASE}.${KERNEL_ARCH}${ED}.tar .
+    cd ${LIVECD_DIR}
+}
+
 
 create_fs () {
     ext_image="${FS_IMAGE_DIR}/freddix.fs"
@@ -258,7 +285,9 @@ create_fs () {
     cp -aT ${FS_DIR}/ ${MNT_DIR}
     umount ${MNT_DIR}
 
-    /usr/sbin/mksquashfs ${ext_image} ${IMAGE_DIR}/freddix.sfs -noappend -no-progress
+    # XZ: -comp xz -Xbcj x86 -b 1048576 -Xdict-size 1048576
+    # LZ4: -comp lz4 -Xhc
+    /usr/sbin/mksquashfs ${ext_image} ${IMAGE_DIR}/freddix.sfs -noappend -no-progress -comp lzo
 }
 
 if [ $(whoami) != root ]; then
@@ -270,14 +299,13 @@ for package in cdrkit cpio findutils gzip squashfs syslinux xz; do
     rpm -q $package > /dev/null 2>&1 || abort "$package not installed"
 done
 
-set -x
+#set -x
 
-clean_build
 prepare
 create_system
 create_boot
-create_image
 create_fs
 create_iso
-#create_tar
+create_tar
+clean_build
 

@@ -2,7 +2,6 @@ FHS
 apg
 bash
 bc
-busybox-static
 bzip2
 ca-certificates
 cabextract
@@ -13,8 +12,9 @@ coreutils
 crda
 cups-clients
 dbus
+dev
 device-mapper
-device-mapper-static
+dhcpcd
 dmidecode
 dosfstools
 duplicity
@@ -42,7 +42,6 @@ fix-info-dir
 fuse
 fuse-curlftpfs
 gawk
-gdb
 gdb
 gettext
 git
@@ -102,12 +101,12 @@ powertop
 prelink
 procps
 psmisc
-pwdutils
 rpm
 rsnapshot
 rsync
 sed
 sg3_utils
+shadow
 sharutils
 sqlite3
 squashfs
