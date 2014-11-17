@@ -15,10 +15,10 @@ if [ $(whoami) != root ]; then
 fi
 
 echo "setting bootable flag"
-parted $device set $partition boot on || abort "can't set bootable flag"
+#parted $device set $partition boot on || abort "can't set bootable flag"
 
 echo "writng MBR"
-dd bs=440 conv=notrunc count=1 if=/usr/share/syslinux/mbr.bin of=$target || abort "dd failed"
+dd bs=440 conv=notrunc count=1 if=/usr/share/syslinux/mbr.bin of=$device || abort "dd failed"
 echo "creating fs"
 mkfs.vfat -n FX_LIVE $target || abort "can't create filesystem"
 

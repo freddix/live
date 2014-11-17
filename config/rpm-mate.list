@@ -2,10 +2,9 @@ mate
 
 NetworkManager
 NetworkManager-applet
-audacious
+accountsservice
 cheser-icon-theme
 dconf
-galculator
 gdk-pixbuf-rsvg
 gparted
 gtk+-theme-engine-murrine
@@ -15,7 +14,6 @@ light-locker
 lightdm
 lightdm-gtk-greeter
 midori
-mousepad
-plank
 udisks2
-viewnior
+
+cool-retro-term

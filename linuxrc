@@ -57,7 +57,6 @@ cow_image=$(losetup --find --show $cow_dir/freddix.cow)
 echo "0 $fs_size snapshot $fs $cow_image N 8" | dmsetup create freddix
 mount -w /dev/mapper/freddix /new_root
 
-[ -c /dev/fb0 ] && fbsplash -s /usr/share/pixmaps/logo.ppm
-
-exec env -i "TERM=$TERM" /usr/sbin/switch_root /new_root /usr/lib/systemd/systemd-bootchart
+exec env -i "TERM=$TERM" /usr/sbin/switch_root /new_root /usr/lib/systemd/systemd
+#exec env -i "TERM=$TERM" /usr/sbin/switch_root /new_root /usr/bin/bash
 
